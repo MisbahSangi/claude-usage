@@ -957,6 +957,12 @@ async function refreshWidget(): Promise<void> {
   renderWidgetMetric(widget);
 }
 
+function handleUrlChange(): void {
+  lastApiTokenValue = null;
+  lastApiUpdatedAt = null;
+  updateTokenLine(getOrCreateWidget(), 'Calculating...');
+}
+
 function handleLifecycleCleanupEvent(_event: Event): void {
   cleanupObservers();
   isWorkStopped = true;
@@ -975,6 +981,7 @@ async function initializeContentScript(): Promise<void> {
 
   messageListenerRef = handleInterceptorMessage;
   window.addEventListener('message', messageListenerRef);
+  window.addEventListener('cup:urlchange', handleUrlChange);
 
   storageListenerRef = (changes, areaName) => {
     try {
