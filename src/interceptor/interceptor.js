@@ -19,7 +19,37 @@
       return res;
     };
 
-    // 2. Stream Interception
+    // 2. Proactive Fetching Listener
+    window.addEventListener('message', async (event) => {
+      if (event.source !== window || !event.data) return;
+      if (event.data.type === 'CUP_FETCH_INITIAL_DATA') {
+        try {
+          const orgRes = await originalFetch('/api/organizations');
+          if (!orgRes.ok) return;
+          const orgs = await orgRes.json();
+          const orgId = orgs[0]?.uuid;
+          if (!orgId) return;
+
+          const usageRes = await originalFetch(`/api/organizations/${orgId}/usage`);
+          if (usageRes.ok) {
+            const usageData = await usageRes.json();
+            window.postMessage({ source: 'cup-interceptor', type: 'CLAUDE_API_DATA', url: `/api/organizations/${orgId}/usage`, payload: usageData }, '*');
+          }
+
+          const match = window.location.pathname.match(/\/chat\/([a-zA-Z0-9-]+)/);
+          if (match) {
+            const chatId = match[1];
+            const chatRes = await originalFetch(`/api/organizations/${orgId}/chat_conversations/${chatId}?tree=true`);
+            if (chatRes.ok) {
+              const chatData = await chatRes.json();
+              window.postMessage({ source: 'cup-interceptor', type: 'CLAUDE_API_DATA', url: `/api/organizations/${orgId}/chat_conversations/${chatId}`, payload: chatData }, '*');
+            }
+          }
+        } catch (e) {}
+      }
+    });
+
+    // 3. Stream Interception
     window.fetch = async function patchedFetch(input, init) {
       const requestUrl = typeof input === 'string' ? input : input && input.url ? input.url : '';
       
@@ -27,7 +57,6 @@
         const response = await originalFetch(input, init);
         const contentType = response.headers.get('content-type') || '';
         
-        // Handle normal API JSON
         if (requestUrl.includes('api.claude.ai/api/') && !contentType.includes('event-stream')) {
           response.clone().json().then(payload => {
             window.postMessage({ source: 'cup-interceptor', type: 'CLAUDE_API_DATA', url: requestUrl, payload }, '*');
@@ -35,15 +64,12 @@
           return response;
         }
 
-        // Handle SSE Streams without breaking Claude
         if (requestUrl.includes('api.claude.ai/api/') && contentType.includes('event-stream')) {
           const [stream1, stream2] = response.body.tee();
-          
           const reader = stream1.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
 
-          // Read stream in background
           (async () => {
             try {
               while (true) {
@@ -51,7 +77,7 @@
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split(/\r\n|\r|\n/);
-                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                buffer = lines.pop() || ''; 
 
                 for (const line of lines) {
                   if (line.startsWith('data:')) {
@@ -59,7 +85,6 @@
                     if (!raw) continue;
                     try {
                       const json = JSON.parse(raw);
-                      // Send chunk to content script exactly like normal API data
                       window.postMessage({ source: 'cup-interceptor', type: 'CLAUDE_API_DATA', url: requestUrl, payload: json }, '*');
                     } catch (e) {}
                   }
@@ -68,7 +93,6 @@
             } catch (e) {}
           })();
 
-          // Return the untouched stream to Claude
           return new Response(stream2, {
             status: response.status,
             statusText: response.statusText,
