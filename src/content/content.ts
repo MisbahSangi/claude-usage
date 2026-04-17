@@ -910,9 +910,20 @@ function createWidget(): HTMLDivElement {
   widget.id = WIDGET_ID;
   widget.className = 'cup-widget';
   widget.innerHTML = `
-    <div class="cup-widget__title">Claude Usage Pro</div>
-    <div class="cup-widget__confidence">Confidence: Estimated</div>
-    <div id="${TOKENS_LINE_ID}" class="cup-widget__tokens">~0 tokens on page</div>
+<div class="cup-widget__title" style="font-weight: 600; margin-bottom: 8px;">Claude Usage Pro</div>
+<div id="${TOKENS_LINE_ID}" class="cup-widget__tokens" style="font-size: 13px;">~0 tokens on page</div>
+<div class="cup-widget__confidence ${CONFIDENCE_SELECTOR.replace('.', '')}" style="font-size: 11px; color: #a0a0a0; margin-top: 2px;">Confidence: Estimated</div>
+<div id="cup-v4-cache" style="font-size: 12px; color: #10b981; margin-top: 6px; display: none;">Cached for: 0:00</div>
+
+<div class="cup-bar-group">
+  <div class="cup-bar-label"><span>Session Limit</span><span id="cup-v4-session-text">0%</span></div>
+  <div class="cup-bar-bg"><div id="cup-v4-session-bar" class="cup-bar-fill" style="width: 0%;"></div></div>
+</div>
+
+<div class="cup-bar-group">
+  <div class="cup-bar-label"><span>Weekly Limit</span><span id="cup-v4-weekly-text">0%</span></div>
+  <div class="cup-bar-bg"><div id="cup-v4-weekly-bar" class="cup-bar-fill" style="width: 0%;"></div></div>
+</div>
   `;
 
   document.body.appendChild(widget);
@@ -961,6 +972,7 @@ function handleUrlChange(): void {
   lastApiTokenValue = null;
   lastApiUpdatedAt = null;
   updateTokenLine(getOrCreateWidget(), 'Calculating...');
+  window.postMessage({ type: 'CUP_FETCH_INITIAL_DATA' }, '*');
 }
 
 function handleLifecycleCleanupEvent(_event: Event): void {
@@ -1056,6 +1068,7 @@ async function initializeContentScript(): Promise<void> {
   }, 3000);
 
   updateWindowState();
+  window.postMessage({ type: 'CUP_FETCH_INITIAL_DATA' }, '*');
 }
 
 void initializeContentScript();
